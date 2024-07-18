@@ -1,3 +1,8 @@
-.exe
-.res
-.o
+# Ignore object files
+*.o
+
+# Ignore executable files
+*.exe
+
+# Ignore resource files
+*.res
