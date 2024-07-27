@@ -2,7 +2,6 @@
 #include <commctrl.h>
 #include "resource.h"
 
-
 #define IDC_MAIN_EDIT 103
 
 typedef struct
@@ -16,6 +15,25 @@ StateInfo *GetAppState(HWND hwnd)
     StateInfo *pState = (StateInfo *)(ptr);
     return pState;
 }
+
+typedef struct
+{
+    char filename[MAX_PATH];
+    LOGFONT font;
+    BOOL hasUnsavedChanges;
+} File_State;
+
+typedef struct
+{
+    HWND hwnd;
+    File_State *fileState;
+    HINSTANCE hInstance;
+    HWND hWndEdit;
+    HICON hIcon;
+    HFONT hFont;
+} Window_State;
+
+Window_State WIN;
 
 LPSTR ReadTextFromEdit(HWND hEdit)
 {
@@ -68,6 +86,30 @@ BOOL SaveTextFile(HWND hEdit, LPCTSTR pszFileName)
         }
         CloseHandle(hFile);
     }
+    const char *fileName = strrchr(pszFileName, '\\');
+    if (fileName)
+    {
+        fileName++;
+    }
+    else
+    {
+        fileName = pszFileName;
+    }
+
+    // Remove the file extension
+    char fileNameWithoutExt[MAX_PATH] = "";
+    const char *dot = strrchr(fileName, '.');
+    if (dot)
+    {
+        size_t length = dot - fileName;
+        strncpy(fileNameWithoutExt, fileName, length);
+        fileNameWithoutExt[length] = '\0';
+    }
+    else
+    {
+        strncpy(fileNameWithoutExt, fileName, MAX_PATH);
+    }
+    SetWindowText(WIN.hwnd, fileNameWithoutExt);
     return bSuccess;
 }
 
@@ -109,13 +151,15 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         hEdit = CreateWindowEx(
             WS_EX_CLIENTEDGE, // Optional window styles.
             "EDIT",           // Predefined class; Edit.
-            "Default text",
+            "",
             WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_HSCROLL | ES_MULTILINE | ES_AUTOVSCROLL | ES_AUTOHSCROLL,
             0, 0, LOWORD(lParam), HIWORD(lParam),
             hwnd,
             (HMENU)IDC_MAIN_EDIT,
             (HINSTANCE)GetWindowLongPtr(hwnd, GWLP_HINSTANCE),
             NULL);
+
+
         if (hEdit == NULL)
             MessageBox(hwnd, "Could not create edit box.", "Error", MB_OK | MB_ICONERROR);
 
@@ -124,23 +168,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
             DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, "Arial");
         SendMessage(hEdit, WM_SETFONT, (WPARAM)hFont, MAKELPARAM(TRUE, 0));
-
-        // // Add Button control
-        // HWND hButton = CreateWindowEx(
-        //     0,                                                     // Optional window styles.
-        //     "BUTTON",                                              // Predefined class; Button.
-        //     "Save",                                            // Button text.
-        //     WS_TABSTOP | WS_VISIBLE | WS_CHILD | BS_DEFPUSHBUTTON, // Styles.
-        //     350,                                                   // x position.
-        //     50,                                                    // y position.
-        //     100,                                                   // Button width.
-        //     50,                                                    // Button height.
-        //     hwnd,                                                  // Parent window.
-        //     (HMENU)ID_MYBUTTON,                                    // Button ID.
-        //     (HINSTANCE)GetWindowLongPtr(hwnd, GWLP_HINSTANCE),
-        //     NULL); // Pointer not needed.
-        // if (hButton == NULL)
-        //     MessageBox(hwnd, "Could not create button.", "Error", MB_OK | MB_ICONERROR);
     }
     else
     {
@@ -151,6 +178,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     {
     case WM_SIZE:
     {
+        // the new set of curly braces {} . These are required when declaring variables inside a switch() statement
         HWND hEdit = GetDlgItem(hwnd, IDC_MAIN_EDIT);
         if (hEdit)
         {
@@ -173,7 +201,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         }
         break;
     case WM_CLOSE:
-        if (MessageBox(hwnd, "Really quit?", "My application", MB_YESNO) == IDYES)
+        if (MessageBox(hwnd, "Do youu want to save changes?", "Notepad", MB_YESNOCANCEL | MB_ICONQUESTION) == IDYES)
         {
             DestroyWindow(hwnd);
         }
@@ -186,22 +214,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     }
     return 0;
 }
-
-// void addMenu(HWND hwnd){
-//     // create menu bar
-//     HMENU hMenubar = CreateMenu();
-//     // main menu
-//     HMENU hMenu = CreateMenu();
-
-//     // menu items
-//     AppendMenu(hMenu, MF_STRING, ID_FILE_ABOUT, "About");
-//     AppendMenu(hMenu, MF_STRING, ID_FILE_EXIT, "Exit");
-//     AppendMenu(hMenubar, MF_POPUP, (UINT_PTR)hMenu, "File");
-
-//     // attach menu bar to the window
-//     SetMenu(hwnd, hMenubar);
-
-// }
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevIstance, LPSTR lpCmdLine, int nCmdShow)
 {
@@ -234,11 +246,12 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevIstance, LPSTR lpCmdLine,
         return 0;
     }
 
-    HWND hwnd;
-    hwnd = CreateWindowEx(
+    WIN.hInstance = hInstance;
+
+    WIN.hwnd = CreateWindowEx(
         0,                   // Optional window styles.
         "WindowClass",       // Window class
-        "My window",         // Window text
+        "Untitled",          // Window text
         WS_OVERLAPPEDWINDOW, // Window style
         CW_USEDEFAULT,       // Position X
         CW_USEDEFAULT,       // Position Y
@@ -250,7 +263,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevIstance, LPSTR lpCmdLine,
         pState               // Additional application data
     );
 
-    if (hwnd == NULL)
+    if (WIN.hwnd == NULL)
     {
         MessageBox(NULL, "Create Window Failed!", "Error!",
                    MB_ICONEXCLAMATION | MB_OK);
@@ -259,14 +272,14 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevIstance, LPSTR lpCmdLine,
 
     INITCOMMONCONTROLSEX icex;
     icex.dwSize = sizeof(INITCOMMONCONTROLSEX);
-    icex.dwICC = ICC_STANDARD_CLASSES; // Enables a set of common controls.
+    icex.dwICC = ICC_STANDARD_CLASSES;
     InitCommonControlsEx(&icex);
 
-    // addMenu(hwnd);
-    ShowWindow(hwnd, nCmdShow);
+    ShowWindow(WIN.hwnd, nCmdShow);
 
-    UpdateWindow(hwnd);
+    UpdateWindow(WIN.hwnd);
 
+    // Message Loop:
     MSG msg;
     while (GetMessage(&msg, NULL, 0, 0) > 0)
     {
