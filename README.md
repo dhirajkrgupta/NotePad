@@ -3,6 +3,7 @@
 ### Prerequisites
 
 - Ensure you have  `gcc` and resource compiler installed on your system.
+- For Windows, tools such as MinGW can provide gcc and windres.
 
   
 #### Steps to Compile and Run
