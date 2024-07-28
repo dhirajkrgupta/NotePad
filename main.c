@@ -1,4 +1,6 @@
 #include <windows.h>
+#include <stdio.h>
+#include <string.h>
 #include <commctrl.h>
 #include "resource.h"
 
@@ -6,18 +8,7 @@
 
 typedef struct
 {
-    char data[10];
-} StateInfo;
-
-StateInfo *GetAppState(HWND hwnd)
-{
-    LONG_PTR ptr = GetWindowLongPtr(hwnd, GWLP_USERDATA);
-    StateInfo *pState = (StateInfo *)(ptr);
-    return pState;
-}
-
-typedef struct
-{
+    char filepath[MAX_PATH];
     char filename[MAX_PATH];
     LOGFONT font;
     BOOL hasUnsavedChanges;
@@ -35,6 +26,52 @@ typedef struct
 
 Window_State WIN;
 
+void getFileNameWithoutExtension(const char *filePath, char *fileNameWithoutExt, size_t maxLen)
+{
+
+    const char *lastBackslash = strrchr(filePath, '\\');
+    if (!lastBackslash)
+    {
+        lastBackslash = filePath;
+    }
+    else
+    {
+        lastBackslash++;
+    }
+
+    const char *lastPeriod = strrchr(lastBackslash, '.');
+    if (!lastPeriod)
+    {
+        lastPeriod = lastBackslash + strlen(lastBackslash);
+    }
+
+    size_t length = lastPeriod - lastBackslash;
+    if (length >= maxLen)
+    {
+        length = maxLen - 1;
+    }
+
+    strncpy(fileNameWithoutExt, lastBackslash, length);
+    fileNameWithoutExt[length] = '\0';
+}
+void HandleEditChange(WPARAM wParam)
+{
+
+    int len = strlen(WIN.fileState->filename);
+
+    char *newStr = (char *)malloc(len + 2);
+    if (newStr == NULL)
+    {
+        MessageBox(NULL, "Could not allocate memory", "Error", MB_OK | MB_ICONERROR);
+        return;
+    }
+
+    newStr[0] = '*';
+    strcpy(newStr + 1, WIN.fileState->filename);
+    strcpy(WIN.fileState->filename, newStr);
+    SetWindowText(WIN.hwnd, newStr);
+    free(newStr);
+}
 LPSTR ReadTextFromEdit(HWND hEdit)
 {
     DWORD dwTextLength;
@@ -86,30 +123,12 @@ BOOL SaveTextFile(HWND hEdit, LPCTSTR pszFileName)
         }
         CloseHandle(hFile);
     }
-    const char *fileName = strrchr(pszFileName, '\\');
-    if (fileName)
-    {
-        fileName++;
-    }
-    else
-    {
-        fileName = pszFileName;
-    }
-
-    // Remove the file extension
-    char fileNameWithoutExt[MAX_PATH] = "";
-    const char *dot = strrchr(fileName, '.');
-    if (dot)
-    {
-        size_t length = dot - fileName;
-        strncpy(fileNameWithoutExt, fileName, length);
-        fileNameWithoutExt[length] = '\0';
-    }
-    else
-    {
-        strncpy(fileNameWithoutExt, fileName, MAX_PATH);
-    }
-    SetWindowText(WIN.hwnd, fileNameWithoutExt);
+    char filetitle[MAX_PATH];
+    getFileNameWithoutExtension(pszFileName, filetitle, sizeof(filetitle));
+    strcpy(WIN.fileState->filepath, pszFileName);
+    SetWindowText(WIN.hwnd, filetitle);
+    strcpy(WIN.fileState->filename, filetitle);
+    WIN.fileState->hasUnsavedChanges = FALSE;
     return bSuccess;
 }
 
@@ -134,17 +153,35 @@ void OpenFileSaveDialog(HWND hwnd)
         SaveTextFile(hEdit, szFileName);
     }
 }
+int fileExists(const char *filename)
+{
+    FILE *file;
+    if (file = fopen(filename, "r"))
+    {
+        fclose(file);
+        return 1;
+    }
+    return 0;
+}
+void Savefile(HWND hwnd)
+{
+    if (fileExists(WIN.fileState->filepath))
+    {
+        SaveTextFile(hwnd, WIN.fileState->filepath);
+    }
+    else
+    {
+        OpenFileSaveDialog(hwnd);
+    }
+}
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
 
-    StateInfo *pState;
-    if (msg == WM_CREATE)
+    switch (msg)
     {
-        CREATESTRUCT *pCreate = (CREATESTRUCT *)(lParam);
-        pState = (StateInfo *)(pCreate->lpCreateParams);
-        SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)pState);
-
+    case WM_CREATE:
+    {
         // Add Edit Control
         HFONT hfDefault;
         HWND hEdit;
@@ -159,7 +196,6 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             (HINSTANCE)GetWindowLongPtr(hwnd, GWLP_HINSTANCE),
             NULL);
 
-
         if (hEdit == NULL)
             MessageBox(hwnd, "Could not create edit box.", "Error", MB_OK | MB_ICONERROR);
 
@@ -168,17 +204,22 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
             DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, "Arial");
         SendMessage(hEdit, WM_SETFONT, (WPARAM)hFont, MAKELPARAM(TRUE, 0));
-    }
-    else
-    {
-        pState = GetAppState(hwnd);
-    }
 
-    switch (msg)
-    {
+        WIN.fileState = (File_State *)malloc(sizeof(File_State));
+        if (WIN.fileState == NULL)
+        {
+            MessageBox(hwnd, "Could not allocate memory for file state.", "Error", MB_OK | MB_ICONERROR);
+        }
+        strcpy(WIN.fileState->filename, "Untitled");
+        LOGFONT logfont;
+        GetObject(hFont, sizeof(LOGFONT), &logfont);
+        WIN.fileState->font = logfont;
+        WIN.fileState->hasUnsavedChanges = FALSE;
+        WIN.hWndEdit = hEdit;
+        break;
+    }
     case WM_SIZE:
     {
-        // the new set of curly braces {} . These are required when declaring variables inside a switch() statement
         HWND hEdit = GetDlgItem(hwnd, IDC_MAIN_EDIT);
         if (hEdit)
         {
@@ -189,8 +230,21 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     case WM_COMMAND:
         switch (LOWORD(wParam))
         {
+        case IDC_MAIN_EDIT:
+        {
+            if (HIWORD(wParam) == EN_CHANGE)
+            {
+                if (WIN.fileState && !WIN.fileState->hasUnsavedChanges)
+                {
+                    HandleEditChange(wParam);
+                    WIN.fileState->hasUnsavedChanges = TRUE;
+                }
+            }
+        }
+        break;
+
         case ID_SAVE_BUTTON:
-            OpenFileSaveDialog(hwnd);
+            Savefile(hwnd);
             break;
         case ID_FILE_ABOUT:
             MessageBox(hwnd, "About menu item clicked", "Notice", MB_OK);
@@ -207,6 +261,10 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         }
         break;
     case WM_DESTROY:
+        if (WIN.fileState)
+        {
+            free(WIN.fileState);
+        }
         PostQuitMessage(0);
         break;
     default:
@@ -239,13 +297,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevIstance, LPSTR lpCmdLine,
         return 0;
     }
 
-    StateInfo *pState = (StateInfo *)GlobalAlloc(GMEM_FIXED, sizeof(StateInfo));
-    CopyMemory(pState->data, "myAppData", 9);
-    if (pState == NULL)
-    {
-        return 0;
-    }
-
     WIN.hInstance = hInstance;
 
     WIN.hwnd = CreateWindowEx(
@@ -260,7 +311,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevIstance, LPSTR lpCmdLine,
         NULL,                // Parent window
         NULL,                // Menu
         hInstance,           // Instance handle
-        pState               // Additional application data
+        NULL                 // Additional application data
     );
 
     if (WIN.hwnd == NULL)
