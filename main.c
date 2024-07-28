@@ -5,7 +5,7 @@
 #include "resource.h"
 
 #define IDC_MAIN_EDIT 103
-
+#define BUFFER_SIZE 1024
 typedef struct
 {
     char filepath[MAX_PATH];
@@ -92,6 +92,7 @@ LPSTR ReadTextFromEdit(HWND hEdit)
     }
     return NULL;
 }
+
 BOOL SaveTextFile(HWND hEdit, LPCTSTR pszFileName)
 {
     HANDLE hFile;
@@ -175,6 +176,58 @@ void Savefile(HWND hwnd)
     }
 }
 
+BOOL ShowTextFile(HWND hEdit, LPCTSTR pszFileName)
+{
+    HANDLE hFile;
+    BOOL bSuccess = FALSE;
+
+    hFile = CreateFile(pszFileName, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hFile != INVALID_HANDLE_VALUE)
+    {
+        DWORD dwBytesRead;
+        char buffer[BUFFER_SIZE];
+        bSuccess = ReadFile(
+            hFile,           // Handle to the file
+            buffer,          // Buffer to receive data
+            BUFFER_SIZE - 1, // Number of bytes to read
+            &dwBytesRead,    // Number of bytes read
+            NULL             // Overlapped
+        );
+        SetWindowText(hEdit, buffer);
+        CloseHandle(hFile);
+    }
+    char filetitle[MAX_PATH];
+    getFileNameWithoutExtension(pszFileName, filetitle, sizeof(filetitle));
+    strcpy(WIN.fileState->filepath, pszFileName);
+    SetWindowText(WIN.hwnd, filetitle);
+    strcpy(WIN.fileState->filename, filetitle);
+    WIN.fileState->hasUnsavedChanges = FALSE;
+    return bSuccess;
+}
+
+void Openfile(HWND hwnd)
+{
+    OPENFILENAME ofn;
+    char szFileName[MAX_PATH] = "";
+
+    ZeroMemory(&ofn, sizeof(ofn));
+
+    ofn.lStructSize = sizeof(OPENFILENAME);
+    ofn.hwndOwner = hwnd;
+    ofn.lpstrFilter = "Text Files (*.txt)\0*.txt\0";
+    ofn.lpstrFile = szFileName;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.lpstrDefExt = "txt";
+    ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_OVERWRITEPROMPT;
+
+    if (GetOpenFileName(&ofn))
+    {
+        HWND hEdit = GetDlgItem(hwnd, IDC_MAIN_EDIT);
+        ShowTextFile(hEdit, szFileName);
+
+    }
+}
+
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
 
@@ -230,6 +283,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     case WM_COMMAND:
         switch (LOWORD(wParam))
         {
+
         case IDC_MAIN_EDIT:
         {
             if (HIWORD(wParam) == EN_CHANGE)
@@ -242,12 +296,14 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             }
         }
         break;
-
+        case ID_FILE:
+            Openfile(hwnd);
+            break;
         case ID_SAVE_BUTTON:
             Savefile(hwnd);
             break;
         case ID_FILE_ABOUT:
-            MessageBox(hwnd, "About menu item clicked", "Notice", MB_OK);
+            MessageBox(hwnd, "A straightforward, no-frills text editor for quick note-taking and editing.", "TextPad", MB_OK);
             break;
         case ID_FILE_EXIT:
             PostQuitMessage(0);
@@ -255,11 +311,19 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         }
         break;
     case WM_CLOSE:
-        if (MessageBox(hwnd, "Do youu want to save changes?", "Notepad", MB_YESNOCANCEL | MB_ICONQUESTION) == IDYES)
+    {
+        int res = MessageBox(hwnd, "Do youu want to save changes?", "Notepad", MB_YESNOCANCEL | MB_ICONQUESTION);
+        if (res == IDYES)
+        {
+            Savefile(hwnd);
+            DestroyWindow(hwnd);
+        }
+        else if (res == IDNO)
         {
             DestroyWindow(hwnd);
         }
         break;
+    }
     case WM_DESTROY:
         if (WIN.fileState)
         {

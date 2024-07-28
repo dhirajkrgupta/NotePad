@@ -6,6 +6,7 @@ IDR_MYMENU MENU
 BEGIN
     POPUP "Menu"
     BEGIN
+        MENUITEM "File"                         ID_FILE
         MENUITEM "&Save",                       ID_SAVE_BUTTON
         MENUITEM "About",                       ID_FILE_ABOUT
         MENUITEM "Exit",                        ID_FILE_EXIT
