@@ -6,7 +6,7 @@
 - For Windows, tools such as MinGW can provide gcc and windres.
 
   
-#### Steps to Compile and Run
+### Steps to Compile and Run
 1. **Compile the Resource file**:
 
    Open a terminal and navigate to the directory containing the Resource file. Run the following command to compile the Resource file:
