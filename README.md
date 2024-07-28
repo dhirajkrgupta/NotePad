@@ -2,7 +2,7 @@
 
 ### Prerequisites
 
-- Ensure you have  `gcc` installed on your system.
+- Ensure you have  `gcc` and resource compiler installed on your system.
 
   
 #### Steps to Compile and Run
