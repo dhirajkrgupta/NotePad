@@ -8,6 +8,7 @@ BEGIN
     BEGIN
         MENUITEM "File"                         ID_FILE
         MENUITEM "&Save",                       ID_SAVE_BUTTON
+        MENUITEM "Font",                        ID_FONT
         MENUITEM "About",                       ID_FILE_ABOUT
         MENUITEM "Exit",                        ID_FILE_EXIT
     END

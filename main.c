@@ -146,7 +146,7 @@ int fileExists(const char *filename)
 void Savefile(HWND hwnd)
 {
     if (fileExists(WIN.fileState->filepath))
-    {   
+    {
         HWND hEdit = GetDlgItem(hwnd, IDC_MAIN_EDIT);
         SaveTextFile(hEdit, WIN.fileState->filepath);
     }
@@ -201,7 +201,26 @@ void Openfile(HWND hwnd)
         ShowTextFile(hEdit, szFileName);
     }
 }
+void Changefont(HWND hwnd)
+{
+    CHOOSEFONT cf;
+    LOGFONT lf;
+    HFONT hFont;
+    ZeroMemory(&cf, sizeof(cf));
+    cf.lStructSize = sizeof(CHOOSEFONT);
+    cf.hwndOwner = hwnd;
+    cf.lpLogFont = &lf;
+    cf.Flags = CF_SCREENFONTS | CF_EFFECTS;
 
+    if(ChooseFont(&cf)){
+        hFont = CreateFontIndirect(cf.lpLogFont);
+        HWND hEdit = GetDlgItem(hwnd, IDC_MAIN_EDIT);
+        SendMessage(hEdit, WM_SETFONT, (WPARAM)hFont, MAKELPARAM(TRUE, 0));
+    }
+
+    
+    
+}
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
 
@@ -227,9 +246,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             MessageBox(hwnd, "Could not create edit box.", "Error", MB_OK | MB_ICONERROR);
 
         HFONT hFont = CreateFont(
-            20, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+            20, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
             ANSI_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-            DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, "Arial");
+            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_MODERN, "Consolas");
         SendMessage(hEdit, WM_SETFONT, (WPARAM)hFont, MAKELPARAM(TRUE, 0));
 
         WIN.fileState = (File_State *)malloc(sizeof(File_State));
@@ -275,6 +294,9 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
             break;
         case ID_SAVE_BUTTON:
             Savefile(hwnd);
+            break;
+        case ID_FONT:
+            Changefont(hwnd);
             break;
         case ID_FILE_ABOUT:
             MessageBox(hwnd, "A straightforward, no-frills text editor for quick note-taking and editing.", "TextPad", MB_OK);
