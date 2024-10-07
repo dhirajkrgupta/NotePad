@@ -146,8 +146,9 @@ int fileExists(const char *filename)
 void Savefile(HWND hwnd)
 {
     if (fileExists(WIN.fileState->filepath))
-    {
-        SaveTextFile(hwnd, WIN.fileState->filepath);
+    {   
+        HWND hEdit = GetDlgItem(hwnd, IDC_MAIN_EDIT);
+        SaveTextFile(hEdit, WIN.fileState->filepath);
     }
     else
     {
