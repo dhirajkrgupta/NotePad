@@ -56,21 +56,14 @@ void getFileNameWithoutExtension(const char *filePath, char *fileNameWithoutExt,
 }
 void HandleEditChange(WPARAM wParam)
 {
-
-    int len = strlen(WIN.fileState->filename);
-
-    char *newStr = (char *)malloc(len + 2);
-    if (newStr == NULL)
+    if (WIN.fileState->filename[0] != '*')
     {
-        MessageBox(NULL, "Could not allocate memory", "Error", MB_OK | MB_ICONERROR);
-        return;
+        char newStr[MAX_PATH + 1];
+        snprintf(newStr, sizeof(newStr), "*%s", WIN.fileState->filename);
+        SetWindowText(WIN.hwnd, newStr);
+        strcpy(WIN.fileState->filename, newStr);
+        WIN.fileState->hasUnsavedChanges = TRUE;
     }
-
-    newStr[0] = '*';
-    strcpy(newStr + 1, WIN.fileState->filename);
-    strcpy(WIN.fileState->filename, newStr);
-    SetWindowText(WIN.hwnd, newStr);
-    free(newStr);
 }
 LPSTR ReadTextFromEdit(HWND hEdit)
 {
@@ -78,16 +71,14 @@ LPSTR ReadTextFromEdit(HWND hEdit)
     dwTextLength = GetWindowTextLength(hEdit);
     if (dwTextLength > 0)
     {
-        LPSTR editText;
-        DWORD dwBufferSize = dwTextLength + 1;
-
-        editText = (LPSTR)GlobalAlloc(GPTR, dwBufferSize);
+        LPSTR editText = (LPSTR)GlobalAlloc(GPTR, dwTextLength + 1);
         if (editText != NULL)
         {
-            if (GetWindowText(hEdit, editText, dwBufferSize))
+            if (GetWindowText(hEdit, editText, dwTextLength + 1))
             {
                 return editText;
             }
+            GlobalFree(editText);
         }
     }
     return NULL;
@@ -95,44 +86,31 @@ LPSTR ReadTextFromEdit(HWND hEdit)
 
 BOOL SaveTextFile(HWND hEdit, LPCTSTR pszFileName)
 {
-    HANDLE hFile;
-    BOOL bSuccess = FALSE;
-
-    hFile = CreateFile(pszFileName, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE hFile = CreateFile(pszFileName, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (hFile != INVALID_HANDLE_VALUE)
     {
-        DWORD dwTextLength;
-
-        dwTextLength = GetWindowTextLength(hEdit);
-        if (dwTextLength > 0)
+        LPSTR pszText = ReadTextFromEdit(hEdit);
+        if (pszText != NULL)
         {
-            LPSTR pszText;
-            DWORD dwBufferSize = dwTextLength + 1;
 
-            pszText = (LPSTR)GlobalAlloc(GPTR, dwBufferSize);
-            if (pszText != NULL)
-            {
-                if (GetWindowText(hEdit, pszText, dwBufferSize))
-                {
-                    DWORD dwWritten;
+            DWORD dwWritten;
+            BOOL bSuccess = WriteFile(hFile, pszText, strlen(pszText), &dwWritten, NULL);
+            GlobalFree(pszText);
+            CloseHandle(hFile);
 
-                    if (WriteFile(hFile, pszText, dwTextLength, &dwWritten, NULL))
-                        bSuccess = TRUE;
-                }
-                GlobalFree(pszText);
-            }
+            char filetitle[MAX_PATH];
+            strcpy(WIN.fileState->filepath, pszFileName);
+            getFileNameWithoutExtension(pszFileName, filetitle, sizeof(filetitle));
+            SetWindowText(WIN.hwnd, filetitle);
+            strcpy(WIN.fileState->filename, filetitle);
+            WIN.fileState->hasUnsavedChanges = FALSE;
+            GlobalFree(pszText);
+            return bSuccess;
         }
         CloseHandle(hFile);
     }
-    char filetitle[MAX_PATH];
-    getFileNameWithoutExtension(pszFileName, filetitle, sizeof(filetitle));
-    strcpy(WIN.fileState->filepath, pszFileName);
-    SetWindowText(WIN.hwnd, filetitle);
-    strcpy(WIN.fileState->filename, filetitle);
-    WIN.fileState->hasUnsavedChanges = FALSE;
-    return bSuccess;
+    return FALSE;
 }
-
 void OpenFileSaveDialog(HWND hwnd)
 {
     OPENFILENAME ofn;
@@ -156,14 +134,15 @@ void OpenFileSaveDialog(HWND hwnd)
 }
 int fileExists(const char *filename)
 {
-    FILE *file;
-    if (file = fopen(filename, "r"))
+    FILE *file = fopen(filename, "r");
+    if (file)
     {
         fclose(file);
         return 1;
     }
     return 0;
 }
+
 void Savefile(HWND hwnd)
 {
     if (fileExists(WIN.fileState->filepath))
@@ -178,33 +157,28 @@ void Savefile(HWND hwnd)
 
 BOOL ShowTextFile(HWND hEdit, LPCTSTR pszFileName)
 {
-    HANDLE hFile;
-    BOOL bSuccess = FALSE;
-
-    hFile = CreateFile(pszFileName, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    HANDLE hFile = CreateFile(pszFileName, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
     if (hFile != INVALID_HANDLE_VALUE)
     {
         DWORD dwBytesRead;
-        char buffer[BUFFER_SIZE];
-        bSuccess = ReadFile(
-            hFile,           // Handle to the file
-            buffer,          // Buffer to receive data
-            BUFFER_SIZE - 1, // Number of bytes to read
-            &dwBytesRead,    // Number of bytes read
-            NULL             // Overlapped
-        );
-        SetWindowText(hEdit, buffer);
+        char buffer[BUFFER_SIZE] = {0};
+        if (ReadFile(hFile, buffer, BUFFER_SIZE - 1, &dwBytesRead, NULL))
+        {
+            SetWindowText(hEdit, buffer);
+            CloseHandle(hFile);
+
+            char filetitle[MAX_PATH];
+            getFileNameWithoutExtension(pszFileName, filetitle, sizeof(filetitle));
+            strcpy(WIN.fileState->filepath, pszFileName);
+            SetWindowText(WIN.hwnd, filetitle);
+            strcpy(WIN.fileState->filename, filetitle);
+            WIN.fileState->hasUnsavedChanges = FALSE;
+            return TRUE;
+        }
         CloseHandle(hFile);
     }
-    char filetitle[MAX_PATH];
-    getFileNameWithoutExtension(pszFileName, filetitle, sizeof(filetitle));
-    strcpy(WIN.fileState->filepath, pszFileName);
-    SetWindowText(WIN.hwnd, filetitle);
-    strcpy(WIN.fileState->filename, filetitle);
-    WIN.fileState->hasUnsavedChanges = FALSE;
-    return bSuccess;
+    return FALSE;
 }
-
 void Openfile(HWND hwnd)
 {
     OPENFILENAME ofn;
@@ -218,13 +192,12 @@ void Openfile(HWND hwnd)
     ofn.lpstrFile = szFileName;
     ofn.nMaxFile = MAX_PATH;
     ofn.lpstrDefExt = "txt";
-    ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY | OFN_OVERWRITEPROMPT;
+    ofn.Flags = OFN_EXPLORER | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY;
 
     if (GetOpenFileName(&ofn))
     {
         HWND hEdit = GetDlgItem(hwnd, IDC_MAIN_EDIT);
         ShowTextFile(hEdit, szFileName);
-
     }
 }
 
@@ -312,13 +285,21 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         break;
     case WM_CLOSE:
     {
-        int res = MessageBox(hwnd, "Do youu want to save changes?", "Notepad", MB_YESNOCANCEL | MB_ICONQUESTION);
-        if (res == IDYES)
+        if (WIN.fileState->hasUnsavedChanges)
         {
-            Savefile(hwnd);
-            DestroyWindow(hwnd);
+            int res = MessageBox(hwnd, "Do you want to save changes?", "Notepad", MB_YESNOCANCEL | MB_ICONQUESTION);
+            if (res == IDYES)
+            {
+                Savefile(hwnd);
+                DestroyWindow(hwnd);
+            }
+            else if (res == IDNO)
+            {
+                DestroyWindow(hwnd);
+            }
+            // If res is IDCANCEL, do nothing, just return to avoid closing the window
         }
-        else if (res == IDNO)
+        else
         {
             DestroyWindow(hwnd);
         }
