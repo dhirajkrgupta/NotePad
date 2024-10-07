@@ -1,6 +1,6 @@
 #include "resource.h"
 
-IDI_MYICON ICON "appicon.ico"
+IDI_MYICON ICON "notes.ico"
 
 IDR_MYMENU MENU
 BEGIN
